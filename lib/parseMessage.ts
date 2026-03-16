@@ -3,8 +3,8 @@ import type { SearchParams } from "./types";
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-// The system prompt is carefully crafted to always return valid JSON.
-// We instruct the model to be conservative: only set fields the user actually mentioned.
+// Instructs Claude to extract only what the user explicitly mentioned.
+// Few-shot examples are included to keep output consistent and JSON-only.
 const SYSTEM_PROMPT = `You are a restaurant search parameter extractor. 
 Given a natural language restaurant query, extract structured search parameters.
 
@@ -32,6 +32,7 @@ User: "best rated Italian restaurants near me"
 User: "pizza"
 {"query":"pizza","sort":"RELEVANCE","limit":10}`;
 
+// Sends the user message to Claude and returns validated search params
 export async function parseMessageToParams(message: string): Promise<SearchParams> {
   const response = await client.messages.create({
     model: "claude-sonnet-4-20250514",
@@ -45,7 +46,7 @@ export async function parseMessageToParams(message: string): Promise<SearchParam
     throw new Error("Unexpected response type from LLM");
   }
 
-  // Strip any accidental markdown fences the model might add
+  // Strip markdown fences in case the model wraps the JSON anyway
   const text = raw.text.trim().replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "");
 
   let parsed: unknown;
@@ -58,8 +59,8 @@ export async function parseMessageToParams(message: string): Promise<SearchParam
   return validateAndCleanParams(parsed);
 }
 
-// Validates the LLM output before we ever use it.
-// This is a critical safety layer — LLMs can hallucinate field values.
+// Validates every field from the LLM before it reaches Foursquare.
+// Unknown or malformed fields are dropped — never passed downstream.
 export function validateAndCleanParams(raw: unknown): SearchParams {
   if (typeof raw !== "object" || raw === null) {
     throw new Error("Params must be a non-null object");
@@ -67,19 +68,19 @@ export function validateAndCleanParams(raw: unknown): SearchParams {
 
   const p = raw as Record<string, unknown>;
 
-  // query is required
   if (typeof p.query !== "string" || p.query.trim() === "") {
     throw new Error('Missing required field: "query"');
   }
 
   const params: SearchParams = {
-    query: p.query.trim().slice(0, 100), // cap length to prevent injection
+    query: p.query.trim().slice(0, 100),
   };
 
   if (typeof p.near === "string" && p.near.trim()) {
     params.near = p.near.trim().slice(0, 200);
   }
 
+  // ll must be a valid lat,lng coordinate string
   if (typeof p.ll === "string" && /^-?\d+\.?\d*,-?\d+\.?\d*$/.test(p.ll)) {
     params.ll = p.ll;
   }
@@ -101,13 +102,14 @@ export function validateAndCleanParams(raw: unknown): SearchParams {
     params.min_rating = p.min_rating;
   }
 
+  // Clamp limit to 1–20 and ensure it's an integer
   const limitRaw = typeof p.limit === "number" ? p.limit : 10;
   params.limit = Math.min(Math.max(1, Math.floor(limitRaw)), 20);
 
   return params;
 }
 
-// Produces a human-readable summary shown in the UI so users see what we searched for.
+// Builds a human-readable summary of what was searched, shown below the results header
 export function buildQuerySummary(params: SearchParams): string {
   const parts: string[] = [];
 
@@ -123,17 +125,9 @@ export function buildQuerySummary(params: SearchParams): string {
 
   parts.push(params.query);
 
-  if (params.near) {
-    parts.push(`in ${params.near}`);
-  }
-
-  if (params.open_now) {
-    parts.push("open now");
-  }
-
-  if (params.min_rating) {
-    parts.push(`rated ${params.min_rating}+`);
-  }
+  if (params.near) parts.push(`in ${params.near}`);
+  if (params.open_now) parts.push("open now");
+  if (params.min_rating) parts.push(`rated ${params.min_rating}+`);
 
   const base = parts.filter(Boolean).join(" ");
   return base.charAt(0).toUpperCase() + base.slice(1);

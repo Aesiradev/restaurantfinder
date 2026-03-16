@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import type { ApiResponse, Restaurant } from "@/lib/types";
 
-// ── Data ──────────────────────────────────────────────────────────────────────
+// Maps category keywords to display emojis for restaurant cards
 const ICONS: Record<string, string> = {
   sushi:"🍣",ramen:"🍜",noodle:"🍜",pho:"🍜",pizza:"🍕",italian:"🍝",pasta:"🍝",
   taco:"🌮",mexican:"🌮",burrito:"🌯",burger:"🍔",american:"🍔",bbq:"🥩",
@@ -12,12 +12,14 @@ const ICONS: Record<string, string> = {
   fish:"🐟",sandwich:"🥪",deli:"🥪",salad:"🥗",healthy:"🥗",vegan:"🥗",
   steak:"🥩",french:"🥐",bakery:"🥐",default:"🍽️",
 };
+
 const getIcon = (cat: string) => {
   const l = cat.toLowerCase();
   for (const [k, v] of Object.entries(ICONS)) if (l.includes(k)) return v;
   return ICONS.default;
 };
 
+// Pre-built search queries shown as clickable chips below the search box
 const SUGGESTIONS = [
   { icon:"🍣", label:"Cheap sushi · LA",  query:"Cheap sushi in downtown Los Angeles open now" },
   { icon:"🍜", label:"Ramen · NYC",        query:"Best ramen in East Village New York" },
@@ -27,6 +29,7 @@ const SUGGESTIONS = [
   { icon:"🥞", label:"Brunch · SF",        query:"Outdoor brunch spots in San Francisco" },
 ];
 
+// Carousel tiles — bg colors are baked in as static data to avoid hydration mismatches
 const TILES = [
   { icon:"🍣", label:"Sushi",   query:"Best sushi near me",               bg:"#fdf0f7" },
   { icon:"🍕", label:"Pizza",   query:"Best pizza near me",               bg:"#f3effe" },
@@ -42,6 +45,7 @@ const TILES = [
   { icon:"🍝", label:"Italian", query:"Best Italian restaurants near me", bg:"#fff5ef" },
 ];
 
+// Cycles through these in the animated typing placeholder
 const PLACEHOLDERS = [
   "cheap sushi in downtown LA that's open now…",
   "cozy Italian in Brooklyn with good reviews…",
@@ -51,6 +55,7 @@ const PLACEHOLDERS = [
   "highly rated ramen in Chicago…",
 ];
 
+// Content for the "How it works" modal steps
 const HOW_STEPS = [
   { n:"01", icon:"✍️", bg:"bg-pink-50",   title:"Describe your craving",
     desc:"Type anything in plain English — cuisine, neighborhood, price, vibe, or 'open now'." },
@@ -60,6 +65,7 @@ const HOW_STEPS = [
     desc:"Real places with ratings, prices, hours, and photos — filtered to match exactly what you asked." },
 ];
 
+// Static examples shown in the API reference modal
 const API_EXAMPLE_REQ  = `GET /api/execute?message=Find%20me%20a%20cheap%20sushi%20restaurant%20in%20downtown%20Los%20Angeles%20that%27s%20open%20now&code=pioneerdevai`;
 const API_EXAMPLE_RESP = `{
   "success": true,
@@ -72,7 +78,6 @@ const API_EXAMPLE_RESP = `{
       "category": "Sushi Restaurant",
       "rating": 8.9,
       "price": 2,
-      "is_open": true,
       "distance": 420,
       "hours_display": "Mon-Sun 11am–10pm",
       "phone": "+12135551234",
@@ -81,7 +86,8 @@ const API_EXAMPLE_RESP = `{
   ]
 }`;
 
-// ── Hooks ─────────────────────────────────────────────────────────────────────
+// Animates the search box placeholder — types out each string, pauses, then deletes it
+// Uses a mounted flag to avoid server/client hydration mismatch on first render
 function useTyping() {
   const [text, setText]       = useState("");
   const [idx, setIdx]         = useState(0);
@@ -107,7 +113,7 @@ function useTyping() {
   return { text, mounted };
 }
 
-// ── Sub-components ────────────────────────────────────────────────────────────
+// Reusable modal wrapper — closes on backdrop click or Escape key
 function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
   useEffect(() => {
     const fn = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
@@ -127,6 +133,7 @@ function Modal({ title, onClose, children }: { title: string; onClose: () => voi
   );
 }
 
+// Color-coded rating badge: green ≥ 8, amber ≥ 6, red below
 function RatingBadge({ rating }: { rating: number }) {
   const cls = rating >= 8 ? "bg-emerald-50 text-emerald-600 border-emerald-200"
     : rating >= 6 ? "bg-amber-50 text-amber-600 border-amber-200"
@@ -134,6 +141,7 @@ function RatingBadge({ rating }: { rating: number }) {
   return <span className={`text-[11px] font-bold px-2 py-0.5 rounded-md border shrink-0 ${cls}`}>★ {rating.toFixed(1)}</span>;
 }
 
+// Renders price level as filled/empty $ signs (e.g. $$◦◦ for price 2)
 function PriceDots({ price }: { price: number }) {
   return (
     <span className="text-xs tracking-widest font-bold">
@@ -142,11 +150,13 @@ function PriceDots({ price }: { price: number }) {
   );
 }
 
+// Individual restaurant card — photo/emoji header links to Foursquare place page
 function RestaurantCard({ r, index }: { r: Restaurant; index: number }) {
   const icon = getIcon(r.category);
   return (
     <article className="card-in bg-white border border-purple-100 rounded-2xl overflow-hidden flex flex-col hover:-translate-y-1 hover:shadow-xl hover:shadow-purple-100/50 hover:border-purple-200 transition-all duration-300" style={{ animationDelay:`${index * 55}ms` }}>
       <div className="relative h-44 shrink-0 overflow-hidden">
+        {/* Clicking the image/thumbnail opens the Foursquare place page */}
         <a
           href={r.foursquare_url ?? r.website ?? "#"}
           target="_blank"
@@ -158,18 +168,12 @@ function RestaurantCard({ r, index }: { r: Restaurant; index: number }) {
             ? <img src={r.photo_url} alt={r.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" loading="lazy" />
             : <div className="w-full h-full bg-gradient-to-br from-purple-50 to-pink-50 flex items-center justify-center text-5xl group-hover:scale-105 transition-transform duration-300">{icon}</div>}
           {r.photo_url && <div className="absolute inset-0 bg-gradient-to-t from-white/60 to-transparent" />}
-          {/* Hover overlay hint */}
           <div className="absolute inset-0 bg-[#2d2035]/0 group-hover:bg-[#2d2035]/10 transition-colors duration-200 flex items-center justify-center">
             <span className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 text-[11px] font-bold text-white bg-[#2d2035]/60 backdrop-blur-sm px-3 py-1.5 rounded-full">
               View on Foursquare ↗
             </span>
           </div>
         </a>
-        {r.is_open !== undefined && (
-          <span className={`absolute top-2.5 left-2.5 text-[9px] font-bold tracking-widest uppercase px-2 py-1 rounded-md backdrop-blur-sm border ${r.is_open ? "bg-emerald-50/90 border-emerald-200 text-emerald-600" : "bg-white/85 border-purple-100 text-purple-400"}`}>
-            {r.is_open ? "● Open" : "Closed"}
-          </span>
-        )}
         <span className="absolute top-2.5 right-2.5 text-base bg-white/85 backdrop-blur-sm rounded-xl px-1.5 py-1 border border-purple-100">{icon}</span>
       </div>
       <div className="p-4 flex flex-col gap-2 flex-1">
@@ -195,6 +199,7 @@ function RestaurantCard({ r, index }: { r: Restaurant; index: number }) {
   );
 }
 
+// Placeholder card shown in a grid while search results are loading
 function SkeletonCard() {
   return (
     <div className="bg-white border border-purple-100 rounded-2xl overflow-hidden">
@@ -206,6 +211,8 @@ function SkeletonCard() {
   );
 }
 
+// Horizontally scrolling category row — direction controls left vs right animation
+// Tiles are duplicated to create a seamless infinite loop effect
 function CarouselRow({ dir, onSearch }: { dir:"l"|"r"; onSearch:(q:string)=>void }) {
   const tiles = [...TILES, ...TILES];
   return (
@@ -224,7 +231,6 @@ function CarouselRow({ dir, onSearch }: { dir:"l"|"r"; onSearch:(q:string)=>void
   );
 }
 
-// ── Page ──────────────────────────────────────────────────────────────────────
 export default function Home() {
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
@@ -236,7 +242,7 @@ export default function Home() {
   const { text: typer, mounted } = useTyping();
   const closeModal = useCallback(() => setModal(null), []);
 
-  // auto-resize textarea width stays full, just height adjusts to content
+  // Auto-resize the textarea as the user types
   useEffect(() => {
     const el = inputRef.current;
     if (!el) return;
@@ -244,11 +250,13 @@ export default function Home() {
     el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
   }, [message]);
 
+  // Prevent background scroll when a modal is open
   useEffect(() => {
     document.body.style.overflow = modal ? "hidden" : "";
     return () => { document.body.style.overflow = ""; };
   }, [modal]);
 
+  // Fires the search — accepts either the textarea value or a pre-built query string
   async function handleSubmit(query?: string) {
     const q = (query ?? message).trim();
     if (!q || loading) return;
@@ -268,7 +276,7 @@ export default function Home() {
 
   const results = data?.success ? data.results : [];
 
-  // Background orb layers — defined as data so JSX stays clean
+  // Decorative animated background orbs defined as data to keep JSX clean
   const ORBS_BIG = [
     { cls:"orb-a", top:"-8%",  left:"-4%",  size:420, color:"rgba(196,176,240,0.18)", delay:"0s",  blur:60 },
     { cls:"orb-b", top:"50%",  left:"78%",  size:500, color:"rgba(249,168,201,0.15)", delay:"4s",  blur:70 },
@@ -285,7 +293,7 @@ export default function Home() {
   return (
     <div className="min-h-screen text-[#2d2035] flex flex-col">
 
-      {/* ── HEADER ── taller, more breathing room */}
+      {/* Sticky header with logo and nav links */}
       <header className="sticky top-0 z-40 bg-[#faf8f5]/90 backdrop-blur-xl border-b border-purple-100">
         <div className="max-w-7xl mx-auto px-8 sm:px-12 h-20 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -300,21 +308,18 @@ export default function Home() {
         </div>
       </header>
 
-      {/* ── HERO ── */}
+      {/* Hero section — search box, suggestion chips, and category carousel */}
       <section className="relative overflow-hidden" style={{ background:"radial-gradient(ellipse 55% 60% at 15% 40%,rgba(196,176,240,0.25) 0%,transparent 65%),radial-gradient(ellipse 45% 50% at 85% 25%,rgba(249,168,201,0.22) 0%,transparent 65%),radial-gradient(ellipse 40% 55% at 55% 85%,rgba(147,213,245,0.18) 0%,transparent 65%),#faf8f5" }}>
 
-        {/* Animated orbs — big layer */}
         {ORBS_BIG.map((o, i) => (
           <div key={i} className={`${o.cls} absolute rounded-full pointer-events-none`}
             style={{ top:o.top, left:o.left, width:o.size, height:o.size, background:o.color, filter:`blur(${o.blur}px)`, animationDelay:o.delay }} />
         ))}
-        {/* Animated orbs — small accent layer */}
         {ORBS_SMALL.map((o, i) => (
           <div key={`s${i}`} className={`${o.cls} absolute rounded-full pointer-events-none`}
             style={{ top:o.top, left:o.left, width:o.size, height:o.size, background:o.color, filter:"blur(35px)", animationDelay:o.delay }} />
         ))}
 
-        {/* Hero content — max-w-5xl so text and search box have real width */}
         <div className="relative max-w-5xl mx-auto px-8 sm:px-12 pt-20 pb-12 sm:pt-28 sm:pb-16 text-center">
 
           <div className="inline-flex items-center gap-2 text-[10px] font-bold tracking-[0.18em] uppercase text-purple-500 bg-purple-50 border border-purple-100 rounded-full px-4 py-1.5 mb-8">
@@ -343,7 +348,7 @@ export default function Home() {
             we'll find the best matches nearby.
           </p>
 
-          {/* Search box — full width of the max-w-5xl container */}
+          {/* Search box with auto-expanding textarea and animated placeholder */}
           <div className="w-full">
             <div className="bg-white border-[1.5px] border-purple-100 rounded-2xl shadow-2xl shadow-purple-200/30 focus-within:border-purple-300 focus-within:ring-4 focus-within:ring-purple-100 transition-all duration-200">
               <div className="relative">
@@ -364,6 +369,7 @@ export default function Home() {
                     <span className="cursor w-0.5 h-[18px] bg-purple-200 rounded-sm ml-0.5 inline-block" />
                   </div>
                 )}
+                {/* Static fallback placeholder rendered server-side before hydration */}
                 {!mounted && !message && (
                   <div className="absolute top-5 left-6 text-[16px] text-purple-300 pointer-events-none">
                     e.g. cheap sushi in downtown LA that's open now…
@@ -381,7 +387,7 @@ export default function Home() {
               </div>
             </div>
 
-            {/* Suggestion chips */}
+            {/* Quick-start suggestion chips */}
             <div className="flex items-center gap-2 mt-4 flex-wrap">
               <span className="text-[10px] font-semibold text-purple-300 shrink-0">Try:</span>
               <div className="flex gap-2 flex-wrap">
@@ -396,7 +402,7 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Carousel */}
+        {/* Scrolling category carousel — two rows, opposite directions */}
         <div className="pb-14 flex flex-col gap-3">
           <p className="text-center text-[10px] font-bold tracking-[0.2em] uppercase text-purple-300 mb-2">Popular categories</p>
           <CarouselRow dir="l" onSearch={handleSubmit} />
@@ -404,7 +410,7 @@ export default function Home() {
         </div>
       </section>
 
-      {/* ── MAIN ── */}
+      {/* Main content area — shows skeletons while loading, results grid when done */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-8 sm:px-12 py-12">
         {(error || (data && !data.success)) && (
           <div className="max-w-2xl mx-auto mb-8 bg-red-50 border border-red-200 rounded-xl px-4 py-3 flex items-start gap-2.5 text-red-500 text-sm">
@@ -435,7 +441,6 @@ export default function Home() {
         )}
       </main>
 
-      {/* ── FOOTER ── */}
       <footer className="border-t border-purple-100 bg-white">
         <div className="max-w-7xl mx-auto px-8 sm:px-12 py-6 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
@@ -447,7 +452,7 @@ export default function Home() {
         </div>
       </footer>
 
-      {/* ── MODALS ── */}
+      {/* How it works modal — explains the 3-step search flow to users */}
       {modal === "how" && (
         <Modal title="How it works" onClose={closeModal}>
           <div className="flex flex-col gap-4">
@@ -470,6 +475,7 @@ export default function Home() {
         </Modal>
       )}
 
+      {/* API reference modal — documents the GET endpoint for external use */}
       {modal === "api" && (
         <Modal title="API Reference" onClose={closeModal}>
           <div className="flex flex-col gap-5">

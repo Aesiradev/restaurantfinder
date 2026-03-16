@@ -66,7 +66,6 @@ textarea, button, input { font-family: 'Nunito', sans-serif; }
 .modal-box { animation: modalIn    0.3s cubic-bezier(0.22,1,0.36,1) forwards; }
 .modal-bg  { animation: backdropIn 0.2s ease forwards; }
 
-/* ── Skeleton shimmer ──────────────────────────────────────────────────────── */
 @keyframes shimmer { 0% { background-position: -600px 0; } 100% { background-position: 600px 0; } }
 .shimmer {
   background: linear-gradient(90deg, #f3effe 25%, #fdf0f7 50%, #f3effe 75%);

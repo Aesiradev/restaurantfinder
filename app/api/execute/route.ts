@@ -4,7 +4,7 @@ import { searchRestaurants } from "@/lib/foursquare";
 import type { ApiResponse } from "@/lib/types";
 
 // GET /api/execute?message=<query>&code=pioneerdevai
-// This is the ONLY endpoint — both the UI and external callers use this same route.
+// Single endpoint used by both the UI and external API consumers
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const message = searchParams.get("message") ?? "";
@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
 }
 
 async function handleRequest(message: string, code: string): Promise<NextResponse<ApiResponse>> {
-  // ── 1. Auth gate ─────────────────────────────────────────────────────────
+  // Auth check — must match the required access code
   if (code !== "pioneerdevai") {
     return NextResponse.json(
       { success: false, error: "Unauthorized. Invalid or missing code.", code: "UNAUTHORIZED" },
@@ -21,7 +21,7 @@ async function handleRequest(message: string, code: string): Promise<NextRespons
     );
   }
 
-  // ── 2. Input validation ───────────────────────────────────────────────────
+  // Reject empty or oversized messages before hitting the LLM
   const trimmed = message.trim();
   if (!trimmed) {
     return NextResponse.json(
@@ -37,7 +37,7 @@ async function handleRequest(message: string, code: string): Promise<NextRespons
     );
   }
 
-  // ── 3. Parse natural language → structured params ─────────────────────────
+  // Parse natural language into validated Foursquare search params via Claude
   let params;
   try {
     params = await parseMessageToParams(trimmed);
@@ -49,13 +49,12 @@ async function handleRequest(message: string, code: string): Promise<NextRespons
     );
   }
 
-  // ── 4. Call Foursquare ────────────────────────────────────────────────────
+  // Fetch matching restaurants from Foursquare
   let results;
   try {
     results = await searchRestaurants(params);
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Unknown error";
-    // Log server-side but return a safe message to client
     console.error("[foursquare error]", msg);
     return NextResponse.json(
       { success: false, error: "Failed to fetch restaurant data. Please try again.", code: "UPSTREAM_ERROR" },
@@ -63,7 +62,6 @@ async function handleRequest(message: string, code: string): Promise<NextRespons
     );
   }
 
-  // ── 5. Return clean response ──────────────────────────────────────────────
   return NextResponse.json({
     success: true,
     query_understood: buildQuerySummary(params),
